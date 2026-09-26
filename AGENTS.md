@@ -1,1 +1,1 @@
-This app is a React single-page app built with Vite, React Router, and Tailwind. There is no Next.js App Router. Routes live in `src/App.tsx`. The `@/` alias points at `src/`.
+The React app lives in `frontend/`. It is a single-page app built with Vite, React Router, and Tailwind. There is no Next.js App Router. Routes live in `frontend/src/App.tsx`. The `@/` alias points at `frontend/src/`. The Django API lives in `backend/`.

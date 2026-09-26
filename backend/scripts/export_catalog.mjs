@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-let source = fs.readFileSync(new URL("../../src/lib/data/movies.ts", import.meta.url), "utf8");
+let source = fs.readFileSync(new URL("../../frontend/src/lib/data/movies.ts", import.meta.url), "utf8");
 source = source.replace(/import type \{ Movie \} from "@\/types";\s*/, "");
 source = source.replace(/\/\*\*[\s\S]*?\*\/\s*/, "");
 source = source.replace("export const movies: Movie[] =", "const movies =");
