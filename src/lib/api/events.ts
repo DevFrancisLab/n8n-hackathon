@@ -26,6 +26,11 @@ function rememberLocally(event: AppEvent) {
   }
 }
 
+export function rememberEventLocally(event: AppEvent) {
+  rememberLocally(event);
+  console.info("[YakWetu event]", event.event, event);
+}
+
 /**
  * Event delivery.
  * Now: console + localStorage, so /demo can show the journey offline.

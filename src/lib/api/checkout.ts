@@ -1,6 +1,8 @@
 import { movies } from "@/lib/data/movies";
+import { getMovie, getMovies } from "@/lib/api/movies";
 import { trackEvent } from "@/lib/events";
-import { listEvents } from "@/lib/api/events";
+import { listEvents, rememberEventLocally } from "@/lib/api/events";
+import { apiFetch, readApiError, useRemoteApi } from "@/lib/api/client";
 import {
   getActiveCustomerId,
   getSessionUser,
@@ -9,7 +11,7 @@ import {
   writeJson,
 } from "@/lib/storage";
 import { createId } from "@/lib/utils";
-import type { Checkout, CustomerDraft, Movie, PaymentMethod, Purchase } from "@/types";
+import type { AppEvent, Checkout, CustomerDraft, Movie, PaymentMethod, Purchase } from "@/types";
 
 /**
  * Checkout state for the demo.
@@ -37,6 +39,31 @@ export function getPurchases() {
 
 function writePurchases(purchases: Purchase[]) {
   writeJson(STORAGE_KEYS.purchases, purchases);
+}
+
+function mirrorEvents(events: AppEvent[] | undefined) {
+  for (const event of events ?? []) rememberEventLocally(event);
+}
+
+async function remoteCheckout(path: string, init?: RequestInit) {
+  const response = await apiFetch(path, init);
+  if (!response.ok) throw new Error(await readApiError(response, "Checkout not found."));
+  return response.json() as Promise<Record<string, unknown> & { events?: AppEvent[] }>;
+}
+
+export async function loadPurchases(): Promise<Purchase[]> {
+  if (!useRemoteApi()) return getPurchases();
+  const response = await apiFetch("/purchases");
+  if (!response.ok) throw new Error(await readApiError(response, "Could not load purchases."));
+  return response.json() as Promise<Purchase[]>;
+}
+
+export async function loadLatestCheckout(movieId: string, customerId = getActiveCustomerId()) {
+  if (!useRemoteApi()) return getLatestCheckout(movieId, customerId);
+  const response = await apiFetch(`/checkouts?movieId=${encodeURIComponent(movieId)}`);
+  if (!response.ok) throw new Error(await readApiError(response, "Could not load checkout."));
+  const data = (await response.json()) as { checkout: Checkout | null };
+  return data.checkout;
 }
 
 export function getCartIds() {
@@ -98,6 +125,21 @@ function createCheckout(movie: Movie, customer: CustomerDraft): Checkout {
 }
 
 export async function getOrStartCheckout(movie: Movie, customer: CustomerDraft) {
+  if (useRemoteApi()) {
+    const data = await remoteCheckout("/checkouts", {
+      method: "POST",
+      body: JSON.stringify({
+        movieId: movie.id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        paymentMethod: "mpesa",
+      }),
+    });
+    mirrorEvents(data.events);
+    const { events: _events, created: _created, ...checkout } = data;
+    return checkout as unknown as Checkout;
+  }
   const existing = getLatestCheckout(movie.id, customer.customerId);
   if (existing && existing.status !== "abandoned") {
     return saveCheckout({
@@ -125,6 +167,13 @@ export async function saveCheckoutDetails(
   checkoutId: string,
   details: { name: string; email: string; phone: string; paymentMethod: PaymentMethod },
 ) {
+  if (useRemoteApi()) {
+    const data = await remoteCheckout(`/checkouts/${checkoutId}`, {
+      method: "PATCH",
+      body: JSON.stringify(details),
+    });
+    return data as unknown as Checkout;
+  }
   const current = readCheckouts().find((checkout) => checkout.id === checkoutId);
   if (!current) throw new Error("Checkout not found.");
   return saveCheckout({
@@ -136,6 +185,11 @@ export async function saveCheckoutDetails(
 }
 
 export async function abandonCheckout(checkoutId: string) {
+  if (useRemoteApi()) {
+    const data = await remoteCheckout(`/checkouts/${checkoutId}/abandon`, { method: "POST" });
+    mirrorEvents(data.events);
+    return data.checkout as Checkout;
+  }
   const current = readCheckouts().find((checkout) => checkout.id === checkoutId);
   if (!current) throw new Error("Checkout not found.");
   if (current.status === "paid") throw new Error("This checkout is already paid.");
@@ -161,6 +215,27 @@ export async function abandonCheckout(checkoutId: string) {
 }
 
 export async function simulateCheckoutAbandonment(movieId = "the-last-harvest") {
+  if (useRemoteApi()) {
+    const found = (await getMovie(movieId)) ?? (await getMovies())[0];
+    if (!found) throw new Error("No demo movie is available.");
+    const session = getSessionUser();
+    const draft = {
+      name: session?.name ?? "Brian",
+      email: session?.email ?? "brian@yakwetu.demo",
+      phone: session?.phone ?? "0700 000 000",
+    };
+    const latest = await loadLatestCheckout(found.id);
+    if (latest && latest.status !== "paid" && latest.status !== "abandoned") {
+      return abandonCheckout(latest.id);
+    }
+    const data = await remoteCheckout("/checkouts", {
+      method: "POST",
+      body: JSON.stringify({ movieId: found.id, forceNew: true, ...draft }),
+    });
+    mirrorEvents(data.events);
+    const { events: _events, created: _created, ...created } = data;
+    return abandonCheckout((created as unknown as Checkout).id);
+  }
   const movie = movies.find((item) => item.id === movieId) ?? movies[0];
   if (!movie) throw new Error("No demo movie is available.");
   const session = getSessionUser();
@@ -188,6 +263,14 @@ function wasAbandoned(checkout: Checkout) {
 }
 
 export async function completePayment(checkoutId: string, method: PaymentMethod) {
+  if (useRemoteApi()) {
+    const data = await remoteCheckout(`/checkouts/${checkoutId}/pay`, {
+      method: "POST",
+      body: JSON.stringify({ paymentMethod: method, outcome: "success" }),
+    });
+    mirrorEvents(data.events);
+    return data.purchase as Purchase;
+  }
   const current = readCheckouts().find((checkout) => checkout.id === checkoutId);
   if (!current) throw new Error("Checkout not found.");
 
@@ -242,6 +325,14 @@ export async function completePayment(checkoutId: string, method: PaymentMethod)
 }
 
 export async function failPayment(checkoutId: string, method: PaymentMethod) {
+  if (useRemoteApi()) {
+    const data = await remoteCheckout(`/checkouts/${checkoutId}/pay`, {
+      method: "POST",
+      body: JSON.stringify({ paymentMethod: method, outcome: "failed" }),
+    });
+    mirrorEvents(data.events);
+    return data.checkout as Checkout;
+  }
   const current = readCheckouts().find((checkout) => checkout.id === checkoutId);
   if (!current) throw new Error("Checkout not found.");
   const next = saveCheckout({

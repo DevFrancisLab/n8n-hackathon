@@ -7,7 +7,7 @@ import { LoadingState } from "@/components/layout/page-status";
 import { MovieArtwork } from "@/components/movies/movie-artwork";
 import { MovieCard } from "@/components/movies/movie-card";
 import { Button } from "@/components/ui/button";
-import { getPurchases } from "@/lib/api/checkout";
+import { loadPurchases } from "@/lib/api/checkout";
 import { getProgressMap, getRecentViewIds, watchedMovieIds } from "@/lib/api/library";
 import { getMovies } from "@/lib/api/movies";
 import { useAuth } from "@/lib/auth-context";
@@ -29,11 +29,11 @@ export function AccountView() {
     if (!ready) return;
     let active = true;
     getMovies()
-      .then((catalog) => {
+      .then(async (catalog) => {
         if (!active) return;
         const byId = new Map(catalog.map((movie) => [movie.id, movie]));
         const customerId = getActiveCustomerId();
-        const owned = getPurchases().filter((purchase) => purchase.customerId === customerId);
+        const owned = (await loadPurchases()).filter((purchase) => purchase.customerId === customerId);
         const progress = getProgressMap();
         const watched = new Set(watchedMovieIds(customerId));
         setPurchases(owned.map((purchase) => ({ ...purchase, movie: byId.get(purchase.movieId) })));

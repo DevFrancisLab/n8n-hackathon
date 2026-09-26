@@ -17,6 +17,8 @@
 /dist/
 /.next/
 /out/
+/backend/.venv/
+/backend/.pgdata/
 
 # production
 /build
@@ -41,3 +43,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python
+__pycache__/
+*.py[cod]
+.venv/

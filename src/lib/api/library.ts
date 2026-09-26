@@ -1,4 +1,6 @@
-import { listEvents } from "@/lib/api/events";
+import { apiFetch, readApiError, useRemoteApi } from "@/lib/api/client";
+import { listEvents, rememberEventLocally } from "@/lib/api/events";
+import { trackEvent } from "@/lib/events";
 import { readJson, STORAGE_KEYS, writeJson } from "@/lib/storage";
 
 export function getRecentViewIds() {
@@ -22,6 +24,24 @@ export function saveProgress(movieId: string, value: number) {
   const all = getProgressMap();
   all[movieId] = Math.max(0, Math.min(100, value));
   writeJson(STORAGE_KEYS.progress, all);
+}
+
+export async function completeWatch(movieId: string, duration: number) {
+  if (useRemoteApi()) {
+    const response = await apiFetch("/watch", {
+      method: "POST",
+      body: JSON.stringify({ movieId }),
+    });
+    if (!response.ok) throw new Error(await readApiError(response, "Could not mark this movie as watched."));
+    const data = (await response.json()) as { events?: Parameters<typeof rememberEventLocally>[0][] };
+    for (const event of data.events ?? []) rememberEventLocally(event);
+    return;
+  }
+  trackEvent({
+    event: "WATCH_COMPLETED",
+    movieId,
+    metadata: { duration },
+  });
 }
 
 export function hasWatched(movieId: string, customerId: string) {

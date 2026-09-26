@@ -9,7 +9,7 @@ import {
   writeJson,
 } from "@/lib/storage";
 import type { LoginInput, SessionUser, SignupInput, StoredUser } from "@/types";
-import { apiFetch, useRemoteApi } from "./client";
+import { apiFetch, readApiError, saveApiToken, useRemoteApi } from "./client";
 
 /**
  * Mock authentication for the hackathon UI.
@@ -32,9 +32,13 @@ function toSession(user: StoredUser): SessionUser {
   return { id: user.id, name: user.name, email: user.email, phone: user.phone };
 }
 
-async function readDetail(response: Response) {
-  const data = (await response.json().catch(() => null)) as { detail?: string } | null;
-  return data?.detail;
+async function readDetail(response: Response, fallback: string) {
+  return readApiError(response, fallback);
+}
+
+function sessionFrom(payload: SessionUser & { token?: string }): SessionUser {
+  if (payload.token) saveApiToken(payload.token);
+  return { id: String(payload.id), name: payload.name, email: payload.email, phone: payload.phone };
 }
 
 export async function signup(input: SignupInput): Promise<SessionUser> {
@@ -44,9 +48,9 @@ export async function signup(input: SignupInput): Promise<SessionUser> {
       body: JSON.stringify(input),
     });
     if (!response.ok) {
-      throw new AuthError((await readDetail(response)) ?? "Could not create your account.");
+      throw new AuthError(await readDetail(response, "Could not create your account."));
     }
-    const user = (await response.json()) as SessionUser;
+    const user = sessionFrom((await response.json()) as SessionUser & { token?: string });
     claimGuestActivity(user.id);
     writeJson(STORAGE_KEYS.session, user);
     trackEvent({
@@ -89,9 +93,9 @@ export async function login(input: LoginInput): Promise<SessionUser> {
       body: JSON.stringify(input),
     });
     if (!response.ok) {
-      throw new AuthError((await readDetail(response)) ?? "Email or password is incorrect.");
+      throw new AuthError(await readDetail(response, "Email or password is incorrect."));
     }
-    const user = (await response.json()) as SessionUser;
+    const user = sessionFrom((await response.json()) as SessionUser & { token?: string });
     claimGuestActivity(user.id);
     writeJson(STORAGE_KEYS.session, user);
     return user;
@@ -110,8 +114,9 @@ export async function login(input: LoginInput): Promise<SessionUser> {
 
 export async function logout() {
   if (useRemoteApi()) {
-    await apiFetch("/auth/logout", { method: "POST" });
+    await apiFetch("/auth/logout", { method: "POST" }).catch(() => undefined);
   }
+  saveApiToken(null);
   removeKey(STORAGE_KEYS.session);
 }
 
@@ -119,10 +124,11 @@ export async function getMe(): Promise<SessionUser | null> {
   if (useRemoteApi()) {
     const response = await apiFetch("/auth/me");
     if (!response.ok) {
+      saveApiToken(null);
       removeKey(STORAGE_KEYS.session);
       return null;
     }
-    const user = (await response.json()) as SessionUser;
+    const user = sessionFrom((await response.json()) as SessionUser & { token?: string });
     writeJson(STORAGE_KEYS.session, user);
     return user;
   }

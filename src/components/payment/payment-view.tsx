@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import {
   completePayment,
   failPayment,
-  getLatestCheckout,
   getOrStartCheckout,
+  loadLatestCheckout,
 } from "@/lib/api/checkout";
 import { getMovie } from "@/lib/api/movies";
 import { useAuth } from "@/lib/auth-context";
@@ -41,7 +41,7 @@ export function PaymentView({ movieId }: { movieId: string }) {
           return;
         }
         const customerId = getActiveCustomerId();
-        const existing = getLatestCheckout(found.id, customerId);
+        const existing = await loadLatestCheckout(found.id, customerId);
         const next =
           existing ??
           (await getOrStartCheckout(found, {

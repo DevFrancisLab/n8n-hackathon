@@ -7,10 +7,9 @@ import { BrowseLink, LoadingState, PageStatus } from "@/components/layout/page-s
 import { MovieArtwork } from "@/components/movies/movie-artwork";
 import { RecommendationRail } from "@/components/movies/recommendation-rail";
 import { Button } from "@/components/ui/button";
-import { getPurchases } from "@/lib/api/checkout";
-import { getProgress, hasWatched, saveProgress } from "@/lib/api/library";
+import { loadPurchases } from "@/lib/api/checkout";
+import { completeWatch, getProgress, hasWatched, saveProgress } from "@/lib/api/library";
 import { getMovie, getMovies } from "@/lib/api/movies";
-import { trackEvent } from "@/lib/events";
 import { moreLikeThis } from "@/lib/recommendations";
 import { getActiveCustomerId } from "@/lib/storage";
 import { formatClock } from "@/lib/utils";
@@ -25,7 +24,7 @@ export function WatchView({ movieId }: { movieId: string }) {
   useEffect(() => {
     let active = true;
     Promise.all([getMovie(movieId), getMovies()])
-      .then(([current, catalog]) => {
+      .then(async ([current, catalog]) => {
         if (!active) return;
         if (!current) {
           setStatus("missing");
@@ -35,7 +34,7 @@ export function WatchView({ movieId }: { movieId: string }) {
         setMovie(current);
         document.title = `Watch ${current.title} · YakWetu`;
         setRelated(moreLikeThis(current, catalog, 3));
-        setOwned(getPurchases().some((purchase) => purchase.movieId === current.id && purchase.customerId === customerId));
+        setOwned((await loadPurchases()).some((purchase) => purchase.movieId === current.id && purchase.customerId === customerId));
         setStatus("ready");
       })
       .catch(() => {
@@ -106,17 +105,16 @@ function Player({ movie, related, owned }: { movie: Movie; related: Movie[]; own
   }
 
   function markWatched() {
-    trackEvent({
-      event: "WATCH_COMPLETED",
-      movieId: movie.id,
-      metadata: { duration: movie.duration },
-    });
-    saveProgress(movie.id, 100);
-    setProgress(100);
-    setPlaying(false);
-    setWatched(true);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    recsRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    void completeWatch(movie.id, movie.duration)
+      .then(() => {
+        saveProgress(movie.id, 100);
+        setProgress(100);
+        setPlaying(false);
+        setWatched(true);
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        recsRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      })
+      .catch(() => undefined);
   }
 
   return (
