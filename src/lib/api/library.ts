@@ -28,10 +28,14 @@ export function saveProgress(movieId: string, value: number) {
 
 export async function completeWatch(movieId: string, duration: number) {
   if (useRemoteApi()) {
-    const response = await apiFetch("/watch", {
-      method: "POST",
-      body: JSON.stringify({ movieId }),
-    });
+    const response = await apiFetch(
+      "/watch",
+      {
+        method: "POST",
+        body: JSON.stringify({ movieId }),
+      },
+      { auth: "required" },
+    );
     if (!response.ok) throw new Error(await readApiError(response, "Could not mark this movie as watched."));
     const data = (await response.json()) as { events?: Parameters<typeof rememberEventLocally>[0][] };
     for (const event of data.events ?? []) rememberEventLocally(event);

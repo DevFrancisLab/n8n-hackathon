@@ -1,10 +1,11 @@
 "use client";
 
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { LoadingState } from "@/components/layout/page-status";
 import { MovieArtwork } from "@/components/movies/movie-artwork";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { movies } from "@/lib/data/movies";
 import { AuthError } from "@/lib/api/auth";
 import { useAuth } from "@/lib/auth-context";
+import { safeNext } from "@/lib/return-to";
 
 const schema = z
   .object({
@@ -33,7 +35,9 @@ type SignupValues = z.infer<typeof schema>;
 
 export function SignupForm() {
   const navigate = useNavigate();
-  const { signup } = useAuth();
+  const [params] = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const { user, ready, signup } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const backdrop = movies[0];
   const form = useForm<SignupValues>({
@@ -49,13 +53,16 @@ export function SignupForm() {
         phone: values.phone,
         password: values.password,
       });
-      navigate("/account");
+      navigate(next);
     } catch (error) {
       form.setError("root", {
         message: error instanceof AuthError ? error.message : "Could not create your account.",
       });
     }
   }
+
+  if (!ready) return <LoadingState label="Checking your session..." />;
+  if (user) return <Navigate to={next} replace />;
 
   return (
     <AuthSplit
@@ -64,7 +71,10 @@ export function SignupForm() {
       footer={
         <p className="text-sm text-muted">
           Already have an account?{" "}
-          <Link to="/login" className="text-foreground underline decoration-accent/80 underline-offset-4">
+          <Link
+            to={`/login?next=${encodeURIComponent(next)}`}
+            className="text-foreground underline decoration-accent/80 underline-offset-4"
+          >
             Sign in
           </Link>
         </p>
@@ -107,9 +117,14 @@ export function SignupForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="new-password"
             aria-invalid={Boolean(form.formState.errors.password)}
-            aria-describedby={form.formState.errors.password ? "password-error" : undefined}
+            aria-describedby={
+              form.formState.errors.password ? "password-hint password-error" : "password-hint"
+            }
             {...form.register("password")}
           />
+          <p id="password-hint" className="text-sm text-muted">
+            At least 8 characters.
+          </p>
         </Field>
         <Field
           id="confirmPassword"
@@ -139,7 +154,13 @@ export function SignupForm() {
             {form.formState.errors.root.message}
           </p>
         ) : null}
-        <Button type="submit" size="lg" className="w-full" disabled={form.formState.isSubmitting}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={form.formState.isSubmitting}
+          aria-busy={form.formState.isSubmitting}
+        >
           {form.formState.isSubmitting ? "Creating account..." : "Create Account"}
         </Button>
       </form>

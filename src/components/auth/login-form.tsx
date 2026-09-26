@@ -1,17 +1,18 @@
 "use client";
 
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AuthSplit } from "@/components/auth/signup-form";
+import { LoadingState } from "@/components/layout/page-status";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { AuthError } from "@/lib/api/auth";
 import { movies } from "@/lib/data/movies";
 import { useAuth } from "@/lib/auth-context";
+import { safeNext } from "@/lib/return-to";
 
 const schema = z.object({
   email: z.string().trim().email("Enter a valid email"),
@@ -23,10 +24,8 @@ type LoginValues = z.infer<typeof schema>;
 export function LoginForm() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login } = useAuth();
-  const [forgot, setForgot] = useState(false);
-  const requested = params.get("next") ?? "/account";
-  const next = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/account";
+  const { user, ready, login } = useAuth();
+  const next = safeNext(params.get("next"));
   const form = useForm<LoginValues>({
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" },
@@ -43,6 +42,9 @@ export function LoginForm() {
     }
   }
 
+  if (!ready) return <LoadingState label="Checking your session..." />;
+  if (user) return <Navigate to={next} replace />;
+
   return (
     <AuthSplit
       movie={movies[1] ?? movies[0]}
@@ -50,7 +52,10 @@ export function LoginForm() {
       footer={
         <p className="text-sm text-muted">
           {"Don't have an account? "}
-          <Link to="/signup" className="text-foreground underline decoration-accent/80 underline-offset-4">
+          <Link
+            to={`/signup?next=${encodeURIComponent(next)}`}
+            className="text-foreground underline decoration-accent/80 underline-offset-4"
+          >
             Create one
           </Link>
         </p>
@@ -77,27 +82,18 @@ export function LoginForm() {
             {...form.register("password")}
           />
         </Field>
-        <button
-          type="button"
-          className="text-sm text-muted underline-offset-4 hover:text-foreground hover:underline"
-          aria-expanded={forgot}
-          aria-controls="forgot-panel"
-          onClick={() => setForgot((value) => !value)}
-        >
-          Forgot password?
-        </button>
-        {forgot ? (
-          <div id="forgot-panel" className="border border-border bg-elevated p-4 text-sm text-muted">
-            Password reset will be available when Django authentication is connected. For this demo,
-            sign in with the email and password you used to create your account.
-          </div>
-        ) : null}
         {form.formState.errors.root ? (
           <p role="alert" className="text-sm text-danger">
             {form.formState.errors.root.message}
           </p>
         ) : null}
-        <Button type="submit" size="lg" className="w-full" disabled={form.formState.isSubmitting}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={form.formState.isSubmitting}
+          aria-busy={form.formState.isSubmitting}
+        >
           {form.formState.isSubmitting ? "Signing in..." : "Sign In"}
         </Button>
       </form>

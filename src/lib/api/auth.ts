@@ -9,7 +9,7 @@ import {
   writeJson,
 } from "@/lib/storage";
 import type { LoginInput, SessionUser, SignupInput, StoredUser } from "@/types";
-import { apiFetch, readApiError, saveApiToken, useRemoteApi } from "./client";
+import { apiFetch, hasApiToken, readApiError, saveApiToken, useRemoteApi } from "./client";
 
 /**
  * Mock authentication for the hackathon UI.
@@ -41,12 +41,26 @@ function sessionFrom(payload: SessionUser & { token?: string }): SessionUser {
   return { id: String(payload.id), name: payload.name, email: payload.email, phone: payload.phone };
 }
 
+function credentials(input: { name?: string; email: string; phone?: string; password: string }) {
+  return {
+    ...input,
+    email: input.email.trim().toLowerCase(),
+    ...(input.name != null ? { name: input.name.trim() } : {}),
+    ...(input.phone != null ? { phone: input.phone.trim() } : {}),
+  };
+}
+
+async function postAuth(path: string, body: unknown) {
+  try {
+    return await apiFetch(path, { method: "POST", body: JSON.stringify(body) }, { auth: "none" });
+  } catch {
+    throw new AuthError("We couldn't reach YakWetu. Check your connection and try again.");
+  }
+}
+
 export async function signup(input: SignupInput): Promise<SessionUser> {
   if (useRemoteApi()) {
-    const response = await apiFetch("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+    const response = await postAuth("/auth/signup", credentials(input));
     if (!response.ok) {
       throw new AuthError(await readDetail(response, "Could not create your account."));
     }
@@ -88,12 +102,12 @@ export async function signup(input: SignupInput): Promise<SessionUser> {
 
 export async function login(input: LoginInput): Promise<SessionUser> {
   if (useRemoteApi()) {
-    const response = await apiFetch("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+    const response = await postAuth("/auth/login", credentials(input));
+    if (response.status === 400 || response.status === 401) {
+      throw new AuthError("Email or password is incorrect.");
+    }
     if (!response.ok) {
-      throw new AuthError(await readDetail(response, "Email or password is incorrect."));
+      throw new AuthError(await readDetail(response, "Could not sign you in. Please try again."));
     }
     const user = sessionFrom((await response.json()) as SessionUser & { token?: string });
     claimGuestActivity(user.id);
@@ -113,8 +127,8 @@ export async function login(input: LoginInput): Promise<SessionUser> {
 }
 
 export async function logout() {
-  if (useRemoteApi()) {
-    await apiFetch("/auth/logout", { method: "POST" }).catch(() => undefined);
+  if (useRemoteApi() && hasApiToken()) {
+    await apiFetch("/auth/logout", { method: "POST" }, { auth: "required" }).catch(() => undefined);
   }
   saveApiToken(null);
   removeKey(STORAGE_KEYS.session);
@@ -122,12 +136,22 @@ export async function logout() {
 
 export async function getMe(): Promise<SessionUser | null> {
   if (useRemoteApi()) {
-    const response = await apiFetch("/auth/me");
-    if (!response.ok) {
+    if (!hasApiToken()) {
+      removeKey(STORAGE_KEYS.session);
+      return null;
+    }
+    let response: Response;
+    try {
+      response = await apiFetch("/auth/me", undefined, { auth: "required" });
+    } catch {
+      return getSessionUser();
+    }
+    if (response.status === 401) {
       saveApiToken(null);
       removeKey(STORAGE_KEYS.session);
       return null;
     }
+    if (!response.ok) return getSessionUser();
     const user = sessionFrom((await response.json()) as SessionUser & { token?: string });
     writeJson(STORAGE_KEYS.session, user);
     return user;

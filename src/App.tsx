@@ -2,6 +2,7 @@ import { Component, useEffect, type ReactNode } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AccountView } from "@/components/account/account-view";
 import { LoginForm } from "@/components/auth/login-form";
+import { RequireAuth } from "@/components/auth/require-auth";
 import { SignupForm } from "@/components/auth/signup-form";
 import { CheckoutView } from "@/components/checkout/checkout-view";
 import { ConciergeView } from "@/components/concierge/concierge-view";
@@ -11,6 +12,7 @@ import { MoviesBrowser } from "@/components/movies/movies-browser";
 import { PaymentView } from "@/components/payment/payment-view";
 import { Button } from "@/components/ui/button";
 import { WatchView } from "@/components/watch/watch-view";
+import { useRemoteApi } from "@/lib/api/client";
 import { HomePage } from "@/pages/home-page";
 import { NotFoundPage } from "@/pages/not-found";
 
@@ -100,7 +102,9 @@ export function App() {
           element={
             <>
               <DocumentTitle title="Checkout · YakWetu" />
-              <CheckoutRoute />
+              <RequireAuth when={useRemoteApi()}>
+                <CheckoutRoute />
+              </RequireAuth>
             </>
           }
         />
@@ -109,11 +113,20 @@ export function App() {
           element={
             <>
               <DocumentTitle title="Payment · YakWetu" />
-              <PaymentRoute />
+              <RequireAuth when={useRemoteApi()}>
+                <PaymentRoute />
+              </RequireAuth>
             </>
           }
         />
-        <Route path="/watch/:id" element={<WatchRoute />} />
+        <Route
+          path="/watch/:id"
+          element={
+            <RequireAuth when={useRemoteApi()}>
+              <WatchRoute />
+            </RequireAuth>
+          }
+        />
         <Route
           path="/login"
           element={
@@ -137,7 +150,9 @@ export function App() {
           element={
             <>
               <DocumentTitle title="Account · YakWetu" />
-              <AccountView />
+              <RequireAuth>
+                <AccountView />
+              </RequireAuth>
             </>
           }
         />

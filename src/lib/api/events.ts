@@ -2,7 +2,7 @@ import { movies } from "@/lib/data/movies";
 import { createId } from "@/lib/utils";
 import { getActiveCustomerId, getSessionUser, readJson, STORAGE_KEYS, writeJson } from "@/lib/storage";
 import type { AppEvent, TrackEventInput } from "@/types";
-import { apiFetch, useRemoteApi } from "./client";
+import { apiFetch, hasApiToken, useRemoteApi } from "./client";
 
 const recentKeys = new Map<string, number>();
 
@@ -42,10 +42,14 @@ export function deliverEvent(event: AppEvent) {
 
   if (!useRemoteApi() || typeof window === "undefined") return;
 
-  void apiFetch("/events", {
-    method: "POST",
-    body: JSON.stringify(event),
-  }).catch((error: unknown) => {
+  void apiFetch(
+    "/events",
+    {
+      method: "POST",
+      body: JSON.stringify(event),
+    },
+    { auth: hasApiToken() ? "required" : "public" },
+  ).catch((error: unknown) => {
     console.warn("[YakWetu] Kept the event locally. Django /api/events is not reachable yet.", error);
   });
 }

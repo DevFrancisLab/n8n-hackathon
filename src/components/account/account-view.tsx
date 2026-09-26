@@ -79,14 +79,11 @@ export function AccountView() {
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-accent">Account</p>
           <h1 className="mt-2 font-serif text-4xl sm:text-5xl">{user?.name ?? "Your YakWetu"}</h1>
-          <p className="mt-3 text-muted">
-            {user ? user.email : "Not signed in"} · {user?.phone ?? "—"}
-          </p>
-          {!user ? (
-            <p className="mt-3 max-w-xl text-sm text-muted">
-              This browser still remembers what you watched. Create an account to keep purchases with you.
-            </p>
+          {user ? (
+            <p className="mt-3 text-sm text-success">Signed in</p>
           ) : null}
+          <p className="mt-2 text-muted">{user?.email}</p>
+          <p className="mt-1 text-muted">{user?.phone}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           {user ? (

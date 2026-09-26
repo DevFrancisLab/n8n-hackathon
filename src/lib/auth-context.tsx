@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import * as authApi from "@/lib/api/auth";
+import { onAuthFailure } from "@/lib/api/client";
+import { removeKey, STORAGE_KEYS } from "@/lib/storage";
 import type { LoginInput, SessionUser, SignupInput } from "@/types";
 
 type AuthContextValue = {
@@ -27,6 +29,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    const unsubscribe = onAuthFailure(() => {
+      removeKey(STORAGE_KEYS.session);
+      if (active) setUser(null);
+    });
     authApi
       .getMe()
       .then((session) => {
@@ -37,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -55,8 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return session;
       },
       logout: async () => {
-        await authApi.logout();
         setUser(null);
+        await authApi.logout();
       },
     }),
     [ready, user],

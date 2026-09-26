@@ -46,21 +46,23 @@ function mirrorEvents(events: AppEvent[] | undefined) {
 }
 
 async function remoteCheckout(path: string, init?: RequestInit) {
-  const response = await apiFetch(path, init);
+  const response = await apiFetch(path, init, { auth: "required" });
   if (!response.ok) throw new Error(await readApiError(response, "Checkout not found."));
   return response.json() as Promise<Record<string, unknown> & { events?: AppEvent[] }>;
 }
 
 export async function loadPurchases(): Promise<Purchase[]> {
   if (!useRemoteApi()) return getPurchases();
-  const response = await apiFetch("/purchases");
+  const response = await apiFetch("/purchases", undefined, { auth: "required" });
   if (!response.ok) throw new Error(await readApiError(response, "Could not load purchases."));
   return response.json() as Promise<Purchase[]>;
 }
 
 export async function loadLatestCheckout(movieId: string, customerId = getActiveCustomerId()) {
   if (!useRemoteApi()) return getLatestCheckout(movieId, customerId);
-  const response = await apiFetch(`/checkouts?movieId=${encodeURIComponent(movieId)}`);
+  const response = await apiFetch(`/checkouts?movieId=${encodeURIComponent(movieId)}`, undefined, {
+    auth: "required",
+  });
   if (!response.ok) throw new Error(await readApiError(response, "Could not load checkout."));
   const data = (await response.json()) as { checkout: Checkout | null };
   return data.checkout;
